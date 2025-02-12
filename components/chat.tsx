@@ -17,12 +17,14 @@ export function Chat({
   selectedChatModel,
   isReadonly,
   systemPrompt,
+  vectorNamespace,
 }: {
   id: string;
   initialMessages: Array<Message>;
   selectedChatModel: string;
   isReadonly: boolean;
   systemPrompt: string;
+  vectorNamespace: string;
 }) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
 
@@ -41,7 +43,8 @@ export function Chat({
     body: { 
       id, 
       selectedChatModel: selectedChatModel,
-      systemPrompt: systemPrompt 
+      systemPrompt: systemPrompt,
+      vectorNamespace,
     },
     initialMessages,
     experimental_throttle: 100,

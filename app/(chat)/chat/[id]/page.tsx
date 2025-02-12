@@ -17,7 +17,12 @@ interface AgentData {
   agent_name: string;
   system_prompt: string;
   primary_model: string;
-  vector_db_config: any;
+  vector_db_config: {
+    namespace: string;
+    documentCount: number;
+    documents: string[];
+    status: string;
+  };
   opening_message: string;
   user_message_color: string;
   agent_message_color: string;
@@ -49,10 +54,22 @@ export default function ChatPage({
 
         if (data) {
           console.log("Data Fetched : ", data);
+          // Add vector search instructions to the system prompt
+          const vectorSearchPrompt = `
+## TOOL USAGE GUIDELINES
+
+1. Vector Search Tool:
+- Use vector search when you need to find specific information from your knowledge base
+- Search whenever a user's question might be answered by the documents in your database
+- Use natural language queries that capture the essence of what you're looking for
+
+2. Weather Tool:
+- Only use when weather information is specifically requested
+`;
           setAgentData(data);
-          // Update the system prompt from agent data
+          // Update the system prompt from agent data with vector search guidelines
           if (data.system_prompt) {
-            setRegularPrompt(data.system_prompt);
+            setRegularPrompt(data.system_prompt + "\n" + vectorSearchPrompt);
             setIsPromptReady(true);
           }
         } else {
@@ -99,13 +116,24 @@ export default function ChatPage({
 
   return (
     <div className="flex flex-col h-screen">
-      <Chat
-        id={id}
-        initialMessages={initialMessages}
-        selectedChatModel={chatModel}
-        isReadonly={false}
-        systemPrompt={agentData.system_prompt}
-      />
+      {agentData && isPromptReady ? (
+        <Chat
+          id={id}
+          initialMessages={initialMessages}
+          selectedChatModel={chatModel}
+          isReadonly={false}
+          systemPrompt={agentData.system_prompt}
+          vectorNamespace={agentData.vector_db_config.namespace}
+        />
+      ) : error ? (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-red-500">Error: {error}</div>
+        </div>
+      ) : (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </div>
+      )}
     </div>
   );
 }

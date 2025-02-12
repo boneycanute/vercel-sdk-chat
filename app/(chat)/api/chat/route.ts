@@ -8,6 +8,7 @@ import {
 import { myProvider } from "@/lib/ai/models";
 import { getMostRecentUserMessage } from "@/lib/utils";
 import { getWeather } from "@/lib/ai/tools/get-weather";
+import { vectorSearch } from "@/lib/ai/tools/vector-search";
 
 export const maxDuration = 60;
 
@@ -25,11 +26,19 @@ export async function POST(request: Request) {
     messages,
     selectedChatModel,
     systemPrompt,
-  }: { 
-    messages: Array<Message>; 
+    vectorNamespace,
+  }: {
+    messages: Array<Message>;
     selectedChatModel: string;
     systemPrompt: string;
+    vectorNamespace: string;
   } = await request.json();
+
+  // Log the namespace we're receiving
+  console.log("Vector namespace from request:", vectorNamespace);
+
+  // Make vectorNamespace available globally for the vector search tool
+  (globalThis as any).__VECTOR_NAMESPACE__ = vectorNamespace;
 
   const userMessage = getMostRecentUserMessage(messages);
 
@@ -48,10 +57,11 @@ export async function POST(request: Request) {
         system: systemPrompt,
         messages,
         maxSteps: 5,
-        experimental_activeTools: ["getWeather"],
+        experimental_activeTools: ["getWeather", "vectorSearch"],
         experimental_transform: smoothStream({ chunking: "word" }),
         tools: {
           getWeather,
+          vectorSearch,
         },
         onFinish: async ({ response, reasoning }) => {
           try {
