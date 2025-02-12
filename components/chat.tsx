@@ -23,7 +23,7 @@ export function Chat({
   isReadonly: boolean;
 }) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  
+
   const {
     messages,
     setMessages,
@@ -77,8 +77,6 @@ export function Chat({
             messages={messages}
             setMessages={setMessages}
             append={append}
-            attachments={attachments}
-            setAttachments={setAttachments}
           />
         )}
       </form>

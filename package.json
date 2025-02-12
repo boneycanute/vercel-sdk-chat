@@ -5,10 +5,7 @@
   "scripts": {
     "dev": "next dev --turbo",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint && biome lint --write --unsafe",
-    "lint:fix": "next lint --fix && biome lint --write --unsafe",
-    "format": "biome format --write"
+    "start": "next start"
   },
   "dependencies": {
     "@ai-sdk/fireworks": "^0.1.8",
