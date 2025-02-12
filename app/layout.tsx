@@ -7,12 +7,12 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://chat.vercel.ai"),
-  title: "Next.js Chatbot Template",
-  description: "Next.js chatbot template using the AI SDK.",
+  title: "Chatbot",
+  description: "chatbot",
 };
 
 export const viewport = {
-  maximumScale: 1, // Disable auto-zoom on mobile Safari
+  maximumScale: 1,
 };
 
 const LIGHT_THEME_COLOR = "hsl(0 0% 100%)";
