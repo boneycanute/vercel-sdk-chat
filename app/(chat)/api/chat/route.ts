@@ -6,7 +6,6 @@ import {
 } from "ai";
 
 import { myProvider } from "@/lib/ai/models";
-import { systemPrompt } from "@/lib/ai/prompts";
 import { getMostRecentUserMessage } from "@/lib/utils";
 import { getWeather } from "@/lib/ai/tools/get-weather";
 
@@ -25,8 +24,12 @@ export async function POST(request: Request) {
   const {
     messages,
     selectedChatModel,
-  }: { messages: Array<Message>; selectedChatModel: string } =
-    await request.json();
+    systemPrompt,
+  }: { 
+    messages: Array<Message>; 
+    selectedChatModel: string;
+    systemPrompt: string;
+  } = await request.json();
 
   const userMessage = getMostRecentUserMessage(messages);
 
@@ -36,12 +39,13 @@ export async function POST(request: Request) {
 
   console.log("Starting chat with model:", selectedChatModel);
   console.log("Last user message:", userMessage.content);
+  console.log("Using system prompt:", systemPrompt);
 
   return createDataStreamResponse({
     execute: (dataStream) => {
       const result = streamText({
         model: myProvider.languageModel(selectedChatModel),
-        system: systemPrompt({ selectedChatModel }),
+        system: systemPrompt,
         messages,
         maxSteps: 5,
         experimental_activeTools: ["getWeather"],

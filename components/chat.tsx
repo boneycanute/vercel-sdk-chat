@@ -16,11 +16,13 @@ export function Chat({
   initialMessages,
   selectedChatModel,
   isReadonly,
+  systemPrompt,
 }: {
   id: string;
   initialMessages: Array<Message>;
   selectedChatModel: string;
   isReadonly: boolean;
+  systemPrompt: string;
 }) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
 
@@ -36,7 +38,11 @@ export function Chat({
     reload,
   } = useChat({
     id,
-    body: { id, selectedChatModel: selectedChatModel },
+    body: { 
+      id, 
+      selectedChatModel: selectedChatModel,
+      systemPrompt: systemPrompt 
+    },
     initialMessages,
     experimental_throttle: 100,
     sendExtraMessageFields: true,

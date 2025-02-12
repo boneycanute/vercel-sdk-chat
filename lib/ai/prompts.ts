@@ -1,19 +1,10 @@
-export const regularPrompt =
-  "You are a friendly assistant! Keep your responses concise and helpful.";
+// Export as a let so it can be modified
+let _regularPrompt = "You are a friendly assistant! Keep your responses concise and helpful.";
 
-export const systemPrompt = ({
-  selectedChatModel,
-}: {
-  selectedChatModel: string;
-}) => {
-  return `You are a friendly assistant with access to real-time weather data! Keep your responses concise and helpful.
+export const getRegularPrompt = () => _regularPrompt;
 
-You can check the current weather at any location using latitude and longitude coordinates. When a user asks about weather:
-1. First determine the appropriate coordinates for the location
-2. Then use the weather tool to fetch current conditions
-3. Present the information in a friendly, easy to understand way
-
-For example, if someone asks about weather in New York, you can use coordinates around 40.7128° N, 74.0060° W.`;
+export const setRegularPrompt = (newPrompt: string) => {
+  _regularPrompt = newPrompt;
 };
 
 export const codePrompt = `

@@ -2,6 +2,9 @@
 import { use, useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { Chat } from "@/components/chat";
+import { setRegularPrompt } from "@/lib/ai/prompts";
+import { generateUUID } from "@/lib/utils";
+import { Message } from "ai";
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -29,6 +32,7 @@ export default function ChatPage({
   const { id } = use(params);
   const [agentData, setAgentData] = useState<AgentData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isPromptReady, setIsPromptReady] = useState(false);
   const chatModel = "chat-model-small";
 
   useEffect(() => {
@@ -46,6 +50,11 @@ export default function ChatPage({
         if (data) {
           console.log("Data Fetched : ", data);
           setAgentData(data);
+          // Update the system prompt from agent data
+          if (data.system_prompt) {
+            setRegularPrompt(data.system_prompt);
+            setIsPromptReady(true);
+          }
         } else {
           setError("Agent not found");
         }
@@ -70,7 +79,7 @@ export default function ChatPage({
     );
   }
 
-  if (!agentData) {
+  if (!agentData || !isPromptReady) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -81,7 +90,8 @@ export default function ChatPage({
   const initialMessages = agentData.opening_message
     ? [
         {
-          role: "assistant",
+          id: generateUUID(),
+          role: "assistant" as const,
           content: agentData.opening_message,
         },
       ]
@@ -91,9 +101,10 @@ export default function ChatPage({
     <div className="flex flex-col h-screen">
       <Chat
         id={id}
-        initialMessages={[]}
+        initialMessages={initialMessages}
         selectedChatModel={chatModel}
         isReadonly={false}
+        systemPrompt={agentData.system_prompt}
       />
     </div>
   );
