@@ -1,10 +1,5 @@
 import { openai } from "@ai-sdk/openai";
-import { fireworks } from "@ai-sdk/fireworks";
-import {
-  customProvider,
-  extractReasoningMiddleware,
-  wrapLanguageModel,
-} from "ai";
+import { customProvider } from "ai";
 
 export const DEFAULT_CHAT_MODEL: string = "chat-model-small";
 

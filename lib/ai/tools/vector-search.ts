@@ -4,6 +4,13 @@ import { Pinecone } from "@pinecone-database/pinecone";
 
 type Metadata = {
   content: string;
+  source?: string;
+  fileType?: string;
+  chunkIndex?: number;
+  timestamp?: number;
+  charCount?: number;
+  tokenCount?: number;
+  documentId?: string;
   [key: string]: unknown;
 };
 
@@ -12,6 +19,64 @@ const pc = new Pinecone({
   apiKey: process.env.PINECONE_API_KEY!,
 });
 
+// Helper function to get embeddings using OpenAI with retry logic
+async function getEmbeddingWithRetry(
+  text: string,
+  maxRetries = 3
+): Promise<number[]> {
+  let lastError: Error | undefined;
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const startTime = new Date().toISOString();
+      console.log(
+        `[Embedding] Attempt ${i + 1}/${maxRetries} started at ${startTime}`
+      );
+
+      const response = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          input: text,
+          model: "text-embedding-3-small", // Updated to match vector creation
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      const embedding = result.data[0].embedding;
+
+      if (!Array.isArray(embedding) || embedding.length === 0) {
+        throw new Error("Invalid embedding format received");
+      }
+
+      console.log(
+        `[Embedding] Successfully generated embedding at ${new Date().toISOString()}`
+      );
+      return embedding;
+    } catch (error) {
+      lastError = error as Error;
+      console.error(`[Embedding] Attempt ${i + 1} failed:`, error);
+
+      if (i < maxRetries - 1) {
+        const delay = 1000 * Math.pow(2, i);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw (
+    lastError || new Error("Failed to generate embedding after all retries")
+  );
+}
+
+// Main vector search tool
 export const vectorSearch = tool({
   description:
     "Search for relevant information in the vector database when you need additional context or specific information that you don't have. Only use this when necessary.",
@@ -26,142 +91,149 @@ export const vectorSearch = tool({
   }),
   execute: async ({ query, namespace, limit }) => {
     const requestId = Math.random().toString(36).substring(7);
-    const startTime = new Date().toISOString();
+    const startTimeMs = Date.now();
 
-    // ONLY use the namespace from the global context
-    const effectiveNamespace = (globalThis as any).__VECTOR_NAMESPACE__;
-    if (!effectiveNamespace) {
-      throw new Error("No namespace provided in global context");
-    }
-
-    // Log when tool is invoked
-    console.log("\n=== Vector Search Tool Invoked ===");
-    console.log("Request Details:", {
+    console.log(`[3][vector-search.ts] Tool execution started:`, {
       requestId,
-      query,
-      namespace: effectiveNamespace, // Only log the effective namespace
-      limit,
-      startTime,
+      namespace: {
+        value: namespace,
+        type: typeof namespace,
+      },
+      timestamp: new Date().toISOString(),
     });
 
     try {
-      // Log before getting embeddings
-      console.log(`[${requestId}] Generating embeddings for query...`);
-      const embedding = await getEmbedding(query);
-      console.log(
-        `[${requestId}] Embeddings generated successfully. Length: ${embedding.length}`
-      );
+      // Get index statistics before search
+      const index = pc.index(process.env.PINECONE_INDEX_NAME!);
+      const stats = await index.describeIndexStats();
 
-      // Log before vector search
-      console.log(`[${requestId}] Vector Search Details:`, {
-        query,
-        namespace: effectiveNamespace,
-        indexName: process.env.PINECONE_INDEX_NAME,
-        embeddingLength: embedding.length,
+      // Log detailed index stats
+      console.log(`[${requestId}] Detailed index stats:`, {
+        totalVectorCount: stats.totalRecordCount,
+        dimension: stats.dimension,
+        namespaces: stats.namespaces
+          ? Object.entries(stats.namespaces).map(([ns, data]) => ({
+              namespace: ns,
+              vectorCount: data.recordCount,
+            }))
+          : [],
+      });
+
+      console.log(`[4][vector-search.ts] Before vector search:`, {
+        requestId,
+        namespace: {
+          value: namespace,
+          type: typeof namespace,
+        },
+        stats: {
+          vectorCount: stats.totalRecordCount,
+          dimensions: stats.dimension,
+        },
         timestamp: new Date().toISOString(),
       });
 
-      // Get the Pinecone index
-      const index = pc.index(process.env.PINECONE_INDEX_NAME!);
-
-      // Log query params
-      console.log(`[${requestId}] Query params:`, {
-        indexName: process.env.PINECONE_INDEX_NAME,
-        filter: { namespace: effectiveNamespace },
-        topK: limit,
-        vectorDimensions: embedding.length,
+      // Generate embedding
+      console.log(`[${requestId}] Generating embeddings for query...`);
+      const embedding = await getEmbeddingWithRetry(query);
+      console.log(`[${requestId}] Embeddings generated successfully.`, {
+        length: embedding.length,
+        // Log first few values to check embedding pattern
+        preview: embedding.slice(0, 5).map((v) => v.toFixed(6)),
+        model: "text-embedding-3-small",
       });
 
-      // Perform the vector search
-      const queryResponse = await index.query({
+      // Query with debug info
+      console.log(`[${requestId}] Query parameters:`, {
+        vectorLength: embedding.length,
+        namespace,
+        limit,
+      });
+
+      // Perform namespace-specific query using namespace chaining
+      const queryResponse = await index.namespace(namespace).query({
         vector: embedding,
-        filter: { namespace: effectiveNamespace },
         topK: limit,
         includeMetadata: true,
+        includeValues: true, // Include vector values to verify dimensions
       });
 
-      // Log the full response for debugging
-      console.log(
-        `[${requestId}] Full Pinecone response:`,
-        JSON.stringify(
-          {
-            matches: queryResponse.matches,
-            namespace: effectiveNamespace,
-            matchCount: queryResponse.matches?.length || 0,
-          },
-          null,
-          2
-        )
-      );
-
-      console.log(`[${requestId}] Raw Pinecone response:`, {
-        matchCount: queryResponse.matches?.length,
+      console.log(`[${requestId}] Full Pinecone response:`, {
         matches: queryResponse.matches?.map((m) => ({
+          id: m.id,
           score: m.score,
           metadata: m.metadata,
+          vector: m.values ? `length: ${m.values.length}` : "no vector",
         })),
+        namespace: queryResponse.namespace,
+        matchCount: queryResponse.matches?.length || 0,
       });
 
-      const endTime = new Date().toISOString();
-      const duration =
-        new Date(endTime).getTime() - new Date(startTime).getTime();
+      // Process matches into a more detailed format
+      const processedResults =
+        queryResponse.matches?.map((match) => {
+          const metadata = match.metadata as Metadata;
+          return {
+            content: metadata.content || "",
+            score: match.score,
+            source: metadata.source || "Unknown",
+            fileType: metadata.fileType || "Unknown",
+            chunkIndex: metadata.chunkIndex || 0,
+            timestamp: metadata.timestamp || Date.now(),
+            charCount: metadata.charCount || metadata.content?.length || 0,
+            documentId: metadata.documentId || match.id,
+            preview: metadata.content?.substring(0, 200) + "...", // First 200 chars as preview
+          };
+        }) || [];
 
-      // Enhanced completion logging
+      // Log the search completion with stats
       console.log("\n=== Vector Search Completed ===");
       console.log("Search Results:", {
         requestId,
-        resultCount: queryResponse.matches?.length || 0,
-        namespace: effectiveNamespace, // Use the namespace we sent in the query
-        duration: `${duration}ms`,
-        topResults: (queryResponse.matches || []).slice(0, 2).map((match) => ({
-          similarity: Math.round((match.score || 0) * 100) / 100,
-          contentPreview:
-            typeof match.metadata?.content === "string"
-              ? match.metadata.content.substring(0, 100) + "..."
-              : "No content available",
+        resultCount: processedResults.length,
+        namespace,
+        duration: `${Date.now() - startTimeMs}ms`,
+        topResults: processedResults.map((r) => ({
+          score: r.score,
+          source: r.source,
+          fileType: r.fileType,
+          preview: r.preview?.substring(0, 100) + "...",
         })),
       });
 
+      // Return enhanced results
       return {
-        results: (queryResponse.matches || []).map((match) => ({
-          content: match.metadata?.content,
-          similarity: match.score || 0,
-          metadata: match.metadata,
+        results: processedResults.map((result) => ({
+          content: result.content,
+          metadata: {
+            source: result.source,
+            fileType: result.fileType,
+            score: result.score,
+            documentInfo: {
+              id: result.documentId,
+              chunkIndex: result.chunkIndex,
+              charCount: result.charCount,
+              createdAt: new Date(result.timestamp).toISOString(),
+            },
+          },
         })),
+        summary: `Found ${processedResults.length} relevant matches from ${
+          processedResults.reduce(
+            (sources, r) => sources.add(r.source),
+            new Set()
+          ).size
+        } different sources.`,
       };
     } catch (error) {
       const errorTime = new Date().toISOString();
       console.error("Vector search error:", {
         error,
         query,
-        namespace: effectiveNamespace,
-        startTime,
+        namespace,
+        startTime: new Date(startTimeMs).toISOString(),
         errorTime,
-        duration: new Date(errorTime).getTime() - new Date(startTime).getTime(),
+        duration: new Date(errorTime).getTime() - startTimeMs,
       });
       throw error;
     }
   },
 });
-
-// Helper function to get embeddings using OpenAI
-async function getEmbedding(text: string) {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      input: text,
-      model: "text-embedding-ada-002",
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to get embedding: ${response.statusText}`);
-  }
-
-  const result = await response.json();
-  return result.data[0].embedding;
-}

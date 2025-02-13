@@ -35,10 +35,11 @@ export async function POST(request: Request) {
   } = await request.json();
 
   // Log the namespace we're receiving
-  console.log("Vector namespace from request:", vectorNamespace);
-
-  // Make vectorNamespace available globally for the vector search tool
-  (globalThis as any).__VECTOR_NAMESPACE__ = vectorNamespace;
+  console.log("[1][route.ts] Received vectorNamespace from request:", {
+    value: vectorNamespace,
+    type: typeof vectorNamespace,
+    timestamp: new Date().toISOString()
+  });
 
   const userMessage = getMostRecentUserMessage(messages);
 
@@ -54,16 +55,31 @@ export async function POST(request: Request) {
     execute: (dataStream) => {
       const result = streamText({
         model: myProvider.languageModel(selectedChatModel),
-        system: systemPrompt,
+        system: systemPrompt + `\nIMPORTANT: When using the vector search tool, always use the namespace: "${vectorNamespace}"`,
         messages,
         maxSteps: 5,
         experimental_activeTools: ["getWeather", "vectorSearch"],
         experimental_transform: smoothStream({ chunking: "word" }),
         tools: {
           getWeather,
-          vectorSearch,
+          vectorSearch: {
+            ...vectorSearch,
+            description: `${vectorSearch.description}\nIMPORTANT: You must use the namespace: "${vectorNamespace}"`,
+            execute: async (params) => {
+              // Override the namespace parameter
+              return vectorSearch.execute({
+                ...params,
+                namespace: vectorNamespace
+              });
+            }
+          }
         },
         onFinish: async ({ response, reasoning }) => {
+          console.log("[2][route.ts] Finished processing with vectorNamespace:", {
+            value: vectorNamespace,
+            type: typeof vectorNamespace,
+            timestamp: new Date().toISOString()
+          });
           try {
             // Extract text content from messages
             const processedMessages = response.messages.map((message) => ({

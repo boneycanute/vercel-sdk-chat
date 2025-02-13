@@ -4,7 +4,6 @@ import { createClient } from "@supabase/supabase-js";
 import { Chat } from "@/components/chat";
 import { setRegularPrompt } from "@/lib/ai/prompts";
 import { generateUUID } from "@/lib/utils";
-import { Message } from "ai";
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -62,6 +61,8 @@ export default function ChatPage({
 - Use vector search when you need to find specific information from your knowledge base
 - Search whenever a user's question might be answered by the documents in your database
 - Use natural language queries that capture the essence of what you're looking for
+- IMPORTANT: Always use the exact namespace that is provided to you - do not modify or hardcode it
+- The namespace will be provided to you by the system, use it as is
 
 2. Weather Tool:
 - Only use when weather information is specifically requested

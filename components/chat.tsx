@@ -50,6 +50,13 @@ export function Chat({
     experimental_throttle: 100,
     sendExtraMessageFields: true,
     generateId: generateUUID,
+    onResponse: () => {
+      console.log("[0][chat.tsx] Sending request with vectorNamespace:", {
+        value: vectorNamespace,
+        type: typeof vectorNamespace,
+        timestamp: new Date().toISOString()
+      });
+    },
     onError: (error) => {
       toast.error("An error occurred, please try again!");
     },
