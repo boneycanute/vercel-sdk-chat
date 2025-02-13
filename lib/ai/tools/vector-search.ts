@@ -29,9 +29,6 @@ async function getEmbeddingWithRetry(
   for (let i = 0; i < maxRetries; i++) {
     try {
       const startTime = new Date().toISOString();
-      console.log(
-        `[Embedding] Attempt ${i + 1}/${maxRetries} started at ${startTime}`
-      );
 
       const response = await fetch("https://api.openai.com/v1/embeddings", {
         method: "POST",
@@ -56,13 +53,9 @@ async function getEmbeddingWithRetry(
         throw new Error("Invalid embedding format received");
       }
 
-      console.log(
-        `[Embedding] Successfully generated embedding at ${new Date().toISOString()}`
-      );
       return embedding;
     } catch (error) {
       lastError = error as Error;
-      console.error(`[Embedding] Attempt ${i + 1} failed:`, error);
 
       if (i < maxRetries - 1) {
         const delay = 1000 * Math.pow(2, i);
@@ -96,16 +89,6 @@ export const vectorSearch = tool({
     const requestId = Math.random().toString(36).substring(7);
     const startTimeMs = Date.now();
 
-    console.log(`[3][vector-search.ts] Tool execution started:`, {
-      requestId,
-      toolCallId: options?.toolCallId,
-      namespace: {
-        value: namespace,
-        type: typeof namespace,
-      },
-      timestamp: new Date().toISOString(),
-    });
-
     try {
       // Check if aborted
       if (options?.abortSignal?.aborted) {
@@ -121,20 +104,7 @@ export const vectorSearch = tool({
         throw new Error("Tool execution was aborted");
       }
 
-      // Log detailed index stats
-      console.log(`[${requestId}] Detailed index stats:`, {
-        totalVectorCount: stats.totalRecordCount,
-        dimension: stats.dimension,
-        namespaces: stats.namespaces
-          ? Object.entries(stats.namespaces).map(([ns, data]) => ({
-              namespace: ns,
-              vectorCount: data.recordCount,
-            }))
-          : [],
-      });
-
       // Generate embedding for the query
-      console.log(`[${requestId}] Generating embeddings for query...`);
       const embedding = await getEmbeddingWithRetry(query);
 
       // Check if aborted
@@ -142,24 +112,7 @@ export const vectorSearch = tool({
         throw new Error("Tool execution was aborted");
       }
 
-      console.log(`[${requestId}] Embeddings generated successfully.`, {
-        length: embedding.length,
-        preview: embedding.slice(0, 5).map((v) => v.toFixed(6)),
-        model: "text-embedding-3-small",
-      });
-
       // Query with debug info
-      console.log(`[${requestId}] Query parameters:`, {
-        vectorLength: embedding.length,
-        namespace,
-        limit,
-      });
-
-      // Check if aborted
-      if (options?.abortSignal?.aborted) {
-        throw new Error("Tool execution was aborted");
-      }
-
       // Perform namespace-specific query using namespace chaining
       const queryResponse = await index.namespace(namespace).query({
         vector: embedding,
@@ -210,14 +163,6 @@ export const vectorSearch = tool({
       };
     } catch (error) {
       const errorTime = new Date().toISOString();
-      console.error(`[${requestId}] Error in vector search:`, {
-        error,
-        query,
-        namespace,
-        startTime: new Date(startTimeMs).toISOString(),
-        errorTime,
-        duration: new Date(errorTime).getTime() - startTimeMs,
-      });
 
       // If it was aborted, throw a specific error
       if (options?.abortSignal?.aborted) {

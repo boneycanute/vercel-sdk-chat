@@ -35,22 +35,11 @@ export async function POST(request: Request) {
     vectorNamespace: string;
   } = await request.json();
 
-  // Log the namespace we're receiving
-  console.log("[1][route.ts] Received vectorNamespace from request:", {
-    value: vectorNamespace,
-    type: typeof vectorNamespace,
-    timestamp: new Date().toISOString(),
-  });
-
   const userMessage = getMostRecentUserMessage(messages);
 
   if (!userMessage) {
     return new Response("No user message found", { status: 400 });
   }
-
-  console.log("Starting chat with model:", selectedChatModel);
-  console.log("Last user message:", userMessage.content);
-  console.log("Using system prompt:", systemPrompt);
 
   return createDataStreamResponse({
     execute: (dataStream) => {
@@ -80,14 +69,6 @@ export async function POST(request: Request) {
           }),
         },
         onFinish: async ({ response, reasoning }) => {
-          console.log(
-            "[2][route.ts] Finished processing with vectorNamespace:",
-            {
-              value: vectorNamespace,
-              type: typeof vectorNamespace,
-              timestamp: new Date().toISOString(),
-            }
-          );
           try {
             // Extract text content from messages
             const processedMessages = response.messages.map((message) => ({
@@ -101,14 +82,8 @@ export async function POST(request: Request) {
                       .join(""),
               reasoning,
             }));
-
-            console.log("Chat response processed", {
-              responseLength: processedMessages.length,
-              hasReasoning: !!reasoning,
-              timestamp: new Date().toISOString(),
-            });
           } catch (error) {
-            console.error("Failed to process chat response", error);
+            throw new Error("Failed to process chat response");
           }
         },
         experimental_telemetry: {
@@ -122,7 +97,6 @@ export async function POST(request: Request) {
       });
     },
     onError: (error) => {
-      console.error("Error in chat stream:", error);
       return "Oops, an error occurred!";
     },
   });
