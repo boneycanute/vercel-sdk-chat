@@ -3,6 +3,7 @@ import {
   createDataStreamResponse,
   smoothStream,
   streamText,
+  tool,
 } from "ai";
 
 import { myProvider } from "@/lib/ai/models";
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
   console.log("[1][route.ts] Received vectorNamespace from request:", {
     value: vectorNamespace,
     type: typeof vectorNamespace,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 
   const userMessage = getMostRecentUserMessage(messages);
@@ -55,31 +56,38 @@ export async function POST(request: Request) {
     execute: (dataStream) => {
       const result = streamText({
         model: myProvider.languageModel(selectedChatModel),
-        system: systemPrompt + `\nIMPORTANT: When using the vector search tool, always use the namespace: "${vectorNamespace}"`,
+        system:
+          systemPrompt +
+          `\nIMPORTANT: When using the vector search tool, always use the namespace: "${vectorNamespace}"`,
         messages,
         maxSteps: 5,
         experimental_activeTools: ["getWeather", "vectorSearch"],
         experimental_transform: smoothStream({ chunking: "word" }),
         tools: {
           getWeather,
-          vectorSearch: {
-            ...vectorSearch,
-            description: `${vectorSearch.description}\nIMPORTANT: You must use the namespace: "${vectorNamespace}"`,
-            execute: async (params) => {
+          vectorSearch: tool({
+            parameters: vectorSearch.parameters,
+            execute: (params, options) => {
               // Override the namespace parameter
-              return vectorSearch.execute({
-                ...params,
-                namespace: vectorNamespace
-              });
-            }
-          }
+              return vectorSearch.execute(
+                {
+                  ...params,
+                  namespace: vectorNamespace,
+                },
+                options
+              );
+            },
+          }),
         },
         onFinish: async ({ response, reasoning }) => {
-          console.log("[2][route.ts] Finished processing with vectorNamespace:", {
-            value: vectorNamespace,
-            type: typeof vectorNamespace,
-            timestamp: new Date().toISOString()
-          });
+          console.log(
+            "[2][route.ts] Finished processing with vectorNamespace:",
+            {
+              value: vectorNamespace,
+              type: typeof vectorNamespace,
+              timestamp: new Date().toISOString(),
+            }
+          );
           try {
             // Extract text content from messages
             const processedMessages = response.messages.map((message) => ({

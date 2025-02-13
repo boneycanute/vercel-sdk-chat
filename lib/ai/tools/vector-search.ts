@@ -1,4 +1,4 @@
-import { tool } from "ai";
+import { tool, ToolExecutionOptions } from "ai";
 import { z } from "zod";
 import { Pinecone } from "@pinecone-database/pinecone";
 
@@ -41,7 +41,7 @@ async function getEmbeddingWithRetry(
         },
         body: JSON.stringify({
           input: text,
-          model: "text-embedding-3-small", // Updated to match vector creation
+          model: "text-embedding-3-small",
         }),
       });
 
@@ -89,12 +89,16 @@ export const vectorSearch = tool({
       .default(3)
       .describe("Maximum number of results to return"),
   }),
-  execute: async ({ query, namespace, limit }) => {
+  execute: async (
+    { query, namespace, limit },
+    options?: ToolExecutionOptions
+  ) => {
     const requestId = Math.random().toString(36).substring(7);
     const startTimeMs = Date.now();
 
     console.log(`[3][vector-search.ts] Tool execution started:`, {
       requestId,
+      toolCallId: options?.toolCallId,
       namespace: {
         value: namespace,
         type: typeof namespace,
@@ -103,9 +107,19 @@ export const vectorSearch = tool({
     });
 
     try {
+      // Check if aborted
+      if (options?.abortSignal?.aborted) {
+        throw new Error("Tool execution was aborted");
+      }
+
       // Get index statistics before search
       const index = pc.index(process.env.PINECONE_INDEX_NAME!);
       const stats = await index.describeIndexStats();
+
+      // Check if aborted
+      if (options?.abortSignal?.aborted) {
+        throw new Error("Tool execution was aborted");
+      }
 
       // Log detailed index stats
       console.log(`[${requestId}] Detailed index stats:`, {
@@ -119,25 +133,17 @@ export const vectorSearch = tool({
           : [],
       });
 
-      console.log(`[4][vector-search.ts] Before vector search:`, {
-        requestId,
-        namespace: {
-          value: namespace,
-          type: typeof namespace,
-        },
-        stats: {
-          vectorCount: stats.totalRecordCount,
-          dimensions: stats.dimension,
-        },
-        timestamp: new Date().toISOString(),
-      });
-
-      // Generate embedding
+      // Generate embedding for the query
       console.log(`[${requestId}] Generating embeddings for query...`);
       const embedding = await getEmbeddingWithRetry(query);
+
+      // Check if aborted
+      if (options?.abortSignal?.aborted) {
+        throw new Error("Tool execution was aborted");
+      }
+
       console.log(`[${requestId}] Embeddings generated successfully.`, {
         length: embedding.length,
-        // Log first few values to check embedding pattern
         preview: embedding.slice(0, 5).map((v) => v.toFixed(6)),
         model: "text-embedding-3-small",
       });
@@ -149,23 +155,17 @@ export const vectorSearch = tool({
         limit,
       });
 
+      // Check if aborted
+      if (options?.abortSignal?.aborted) {
+        throw new Error("Tool execution was aborted");
+      }
+
       // Perform namespace-specific query using namespace chaining
       const queryResponse = await index.namespace(namespace).query({
         vector: embedding,
         topK: limit,
         includeMetadata: true,
         includeValues: true, // Include vector values to verify dimensions
-      });
-
-      console.log(`[${requestId}] Full Pinecone response:`, {
-        matches: queryResponse.matches?.map((m) => ({
-          id: m.id,
-          score: m.score,
-          metadata: m.metadata,
-          vector: m.values ? `length: ${m.values.length}` : "no vector",
-        })),
-        namespace: queryResponse.namespace,
-        matchCount: queryResponse.matches?.length || 0,
       });
 
       // Process matches into a more detailed format
@@ -184,21 +184,6 @@ export const vectorSearch = tool({
             preview: metadata.content?.substring(0, 200) + "...", // First 200 chars as preview
           };
         }) || [];
-
-      // Log the search completion with stats
-      console.log("\n=== Vector Search Completed ===");
-      console.log("Search Results:", {
-        requestId,
-        resultCount: processedResults.length,
-        namespace,
-        duration: `${Date.now() - startTimeMs}ms`,
-        topResults: processedResults.map((r) => ({
-          score: r.score,
-          source: r.source,
-          fileType: r.fileType,
-          preview: r.preview?.substring(0, 100) + "...",
-        })),
-      });
 
       // Return enhanced results
       return {
@@ -225,7 +210,7 @@ export const vectorSearch = tool({
       };
     } catch (error) {
       const errorTime = new Date().toISOString();
-      console.error("Vector search error:", {
+      console.error(`[${requestId}] Error in vector search:`, {
         error,
         query,
         namespace,
@@ -233,6 +218,12 @@ export const vectorSearch = tool({
         errorTime,
         duration: new Date(errorTime).getTime() - startTimeMs,
       });
+
+      // If it was aborted, throw a specific error
+      if (options?.abortSignal?.aborted) {
+        throw new Error("Vector search was aborted");
+      }
+
       throw error;
     }
   },
